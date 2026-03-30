@@ -387,6 +387,8 @@ function initializeElements() {
     thoughtsInput: document.getElementById("thoughtsInput"),
     frictionIndex: document.getElementById("frictionIndex"),
     frictionValue: document.getElementById("frictionValue"),
+    firstDayEl: document.getElementById("firstDay"),
+    firstDateEl: document.getElementById("firstDate"),
     lastDayEl: document.getElementById("lastDay"),
     lastDateEl: document.getElementById("lastDate"),
     diffDaysEl: document.getElementById("diffDays"),
@@ -478,6 +480,8 @@ async function loadDatesFromDB() {
     });
 
     const sortedDates = Array.from(dates).sort().reverse();
+    const oldestDate = Array.from(dates).sort()[0];
+    const newestDate = sortedDates[0];
     console.log("🔵 loadDatesFromDB: STEP 5 - unique dates:", sortedDates);
     
     if (sortedDates.length === 0) {
@@ -486,7 +490,25 @@ async function loadDatesFromDB() {
       elements.dbDateSelect.innerHTML = "<option value=\"\">Выберите дату</option>";
       return;
     }
-    
+
+    // Заполняем автополя первого и последнего дня
+    if (elements.firstDateEl) {
+      elements.firstDateEl.value = oldestDate;
+    }
+    if (elements.lastDateEl) {
+      elements.lastDateEl.value = newestDate;
+    }
+    if (elements.firstDayEl || elements.lastDayEl) {
+      const minDay = Math.min(...completions.map(c => c.day_number || 1));
+      const maxDay = Math.max(...completions.map(c => c.day_number || 1));
+      if (elements.firstDayEl) {
+        elements.firstDayEl.value = minDay || 1;
+      }
+      if (elements.lastDayEl) {
+        elements.lastDayEl.value = maxDay || 1;
+      }
+    }
+
     // Также загружаем статистику за всё время
     try {
       const statsResponse = await fetchAPI("/api/stats/period?period=all");
@@ -510,6 +532,12 @@ async function loadDatesFromDB() {
     elements.dbDateSelect.innerHTML = "<option value=\"\">Выберите дату</option>" +
       sortedDates.map(d => `<option value="${d}">${d}</option>`).join("");
     console.log("✅ loadDatesFromDB: STEP 6 - select populated with", sortedDates.length, "dates");
+
+    // Автоматически подгружаем последний (последний заполненный) день
+    if (sortedDates.length > 0) {
+      elements.dbDateSelect.value = sortedDates[0];
+      await loadDayFromDB();
+    }
 
     updateReportOutput();
     alert("✅ Дат загружено: " + sortedDates.length);
@@ -628,6 +656,8 @@ async function loadDayFromDB() {
     elements.reportDateEl.value = date;
     elements.lastDateEl.value = date;
     elements.lastDayEl.value = day.day_number || elements.lastDayEl.value || "0";
+    if (!elements.firstDateEl.value) elements.firstDateEl.value = date;
+    if (!elements.firstDayEl.value) elements.firstDayEl.value = day.day_number || "1";
     elements.frictionIndex.value = friction;
     elements.frictionValue.textContent = friction;
     elements.thoughtsInput.value = day.thoughts || "";
@@ -728,6 +758,24 @@ function parseTextToStructure(text) {
     console.error("🔴 parseTextToStructure: stack:", e.stack);
     throw e;
   }
+}
+
+function serializeParsedToText() {
+  const lines = [];
+  parsed.forEach(item => {
+    if (item.type === "blank") {
+      lines.push("");
+    } else if (item.type === "category") {
+      lines.push(item.text);
+      lines.push("———————————————");
+    } else if (item.type === "habit") {
+      const sign = item.success ? "+" : "-";
+      const quantity = item.quantity ? ` — ${item.quantity} ${item.unit || ""}` : "";
+      const stats = formatStats(item.stats);
+      lines.push(`${sign} ${item.name}${quantity} ${stats}`);
+    }
+  });
+  return lines.join("\n");
 }
 
 function parseTextInput() {
@@ -836,13 +884,15 @@ function renderTasks() {
 
       const controls = document.createElement("div");
       controls.className = "habit-controls";
-      if (catalogHabit) {
-        const removeBtn = document.createElement("button");
-        removeBtn.textContent = "×";
-        removeBtn.className = "small";
-        removeBtn.onclick = () => { parsed = parsed.filter(p => !(p.type === "habit" && p.name === item.name && p.category === item.category)); renderTasks(); renderMeta(); };
-        controls.appendChild(removeBtn);
-      } else {
+
+      const removeBtn = document.createElement("button");
+      removeBtn.textContent = "×";
+      removeBtn.className = "small";
+      removeBtn.title = "Удалить привычку";
+      removeBtn.onclick = () => { parsed.splice(idx, 1); renderTasks(); renderMeta(); updateReportOutput(); };
+      controls.appendChild(removeBtn);
+
+      if (!catalogHabit) {
         const addBtn = document.createElement("button");
         addBtn.textContent = "+ BD";
         addBtn.className = "small";
@@ -866,12 +916,18 @@ function renderTasks() {
 
 function computeDayNumber() {
   const reportDate = elements.reportDateEl.value ? new Date(elements.reportDateEl.value) : new Date();
+  const firstDateVal = elements.firstDateEl.value ? new Date(elements.firstDateEl.value) : null;
+  const firstDayVal = parseInt(elements.firstDayEl.value, 10) || 1;
   const lastDateVal = elements.lastDateEl.value ? new Date(elements.lastDateEl.value) : null;
   const lastDayVal = parseInt(elements.lastDayEl.value, 10) || 0;
-  if (lastDateVal) {
-    return lastDayVal + daysBetween(lastDateVal, reportDate);
+
+  if (firstDateVal) {
+    return Math.max(1, firstDayVal + daysBetween(firstDateVal, reportDate));
   }
-  return lastDayVal;
+  if (lastDateVal) {
+    return Math.max(1, lastDayVal + daysBetween(lastDateVal, reportDate));
+  }
+  return 1;
 }
 
 function renderMeta() {
@@ -1368,35 +1424,36 @@ function updateCatalogModal() {
 }
 
 function addHabitToText(habit) {
-  const stats = formatStats({
+  const category = habit.category || "Без категории";
+  const stats = {
     I: habit.i || 0, S: habit.s || 0, W: habit.w || 0,
     E: habit.e || 0, C: habit.c || 0, H: habit.h || 0,
     ST: habit.st || 0, $: habit.money || 0
-  });
-  
-  const quantity = habit.default_quantity ? ` — ${habit.default_quantity}${habit.unit ? " " + habit.unit : ""}` : "";
-  const line = `+ ${habit.name}${quantity} ${stats}\n`;
-  
-  const category = habit.category || "Без категории";
-  const lines = elements.tasksInput.value.split("\n");
-  let insertIdx = lines.length;
-  
-  for (let i = 0; i < lines.length; i++) {
-    if (lines[i].trim() === category) {
-      for (let j = i + 1; j < lines.length; j++) {
-        if (lines[j].trim() && !lines[j].startsWith("+") && !lines[j].startsWith("-") && !lines[j].startsWith("—")) {
-          insertIdx = j;
-          break;
-        }
-      }
-      if (insertIdx === lines.length) insertIdx = i + 1;
-      break;
-    }
+  };
+  const inserted = {
+    type: "habit",
+    name: habit.name,
+    category,
+    success: true,
+    quantity: habit.default_quantity || null,
+    unit: habit.unit || null,
+    stats,
+  };
+
+  let categoryIdx = parsed.findIndex(p => p.type === "category" && p.text === category);
+  if (categoryIdx === -1) {
+    parsed.push({ type: "category", text: category });
+    parsed.push({ type: "blank" });
+    categoryIdx = parsed.findIndex(p => p.type === "category" && p.text === category);
   }
-  
-  lines.splice(insertIdx, 0, line.trim());
-  elements.tasksInput.value = lines.join("\n");
-  
+
+  let insertPosition = categoryIdx + 1;
+  while (insertPosition < parsed.length && parsed[insertPosition].type === "habit") {
+    insertPosition++;
+  }
+
+  parsed.splice(insertPosition, 0, inserted);
+  elements.tasksInput.value = serializeParsedToText();
   parseTextInput();
   hideModal("habitCatalogModal");
 }
@@ -1404,6 +1461,8 @@ function addHabitToText(habit) {
 function saveToLocalStorage() {
   const data = {
     tasksInput: elements.tasksInput.value,
+    firstDay: elements.firstDayEl.value,
+    firstDate: elements.firstDateEl.value,
     lastDay: elements.lastDayEl.value,
     lastDate: elements.lastDateEl.value,
     reportDate: elements.reportDateEl.value,
@@ -1418,6 +1477,8 @@ function saveToLocalStorage() {
 function loadFromLocalStorage() {
   const data = JSON.parse(localStorage.getItem("disciplineReport") || "{}");
   if (data.tasksInput) elements.tasksInput.value = data.tasksInput;
+  if (data.firstDay) elements.firstDayEl.value = data.firstDay;
+  if (data.firstDate) elements.firstDateEl.value = data.firstDate;
   if (data.lastDay) elements.lastDayEl.value = data.lastDay;
   if (data.lastDate) elements.lastDateEl.value = data.lastDate;
   if (data.reportDate) elements.reportDateEl.value = data.reportDate;
@@ -1554,6 +1615,12 @@ async function saveToDatabase() {
         body: JSON.stringify(payload)
       });
     }
+
+    // После сохранения гарантируем, что поля первого/последнего дня синхронизированы
+    if (!elements.firstDateEl.value) elements.firstDateEl.value = completionData.date;
+    if (!elements.firstDayEl.value) elements.firstDayEl.value = completionData.day_number;
+    elements.lastDateEl.value = completionData.date;
+    elements.lastDayEl.value = completionData.day_number;
 
     console.log("✅ ✅ ✅ saveToDatabase: УСПЕХ! Данные сохранены в БД");
     alert("✓ Сохранено в БД!\nДата: " + completionData.date + "\nПривычек: " + rawHabits.length);
