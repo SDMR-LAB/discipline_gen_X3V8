@@ -32,13 +32,14 @@ def register_combinations_api(app, db: Database):
         try:
             db.execute("""
                 INSERT INTO habit_biometric_links 
-                (habit_id, biometric_type, biometric_id, bonus_i, bonus_s, bonus_w, 
-                 bonus_e, bonus_c, bonus_h, bonus_st, bonus_money)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (habit_id, biometric_type, biometric_id, biometric_value, bonus_i, bonus_s, bonus_w, 
+                bonus_e, bonus_c, bonus_h, bonus_st, bonus_money)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 data['habit_id'],
-                data['biometric_type'],  # 'substance', 'meal', 'activity', 'sleep', 'measurement'
+                data['biometric_type'],
                 data.get('biometric_id'),
+                data.get('biometric_value'),   # новое поле
                 data.get('bonus_i', 0),
                 data.get('bonus_s', 0),
                 data.get('bonus_w', 0),
@@ -177,24 +178,99 @@ def register_combinations_api(app, db: Database):
                 'biometric': {'i': 0, 's': 0, 'w': 0, 'e': 0, 'c': 0, 'h': 0, 'st': 0, 'money': 0},
                 'finance': {'i': 0, 's': 0, 'w': 0, 'e': 0, 'c': 0, 'h': 0, 'st': 0, 'money': 0},
             }
-            
+
             # Получить связи привычка-биометрика
             biometric_links = db.query(
                 "SELECT * FROM habit_biometric_links WHERE habit_id = ?",
                 (habit_id,)
             )
+
             for link in biometric_links:
-                # Проверить, есть ли запись в биометрике за эту дату
-                # TODO: проверка в зависимости от типа
-                bonuses['biometric']['i'] += link['bonus_i']
-                bonuses['biometric']['s'] += link['bonus_s']
-                bonuses['biometric']['w'] += link['bonus_w']
-                bonuses['biometric']['e'] += link['bonus_e']
-                bonuses['biometric']['c'] += link['bonus_c']
-                bonuses['biometric']['h'] += link['bonus_h']
-                bonuses['biometric']['st'] += link['bonus_st']
-                bonuses['biometric']['money'] += link['bonus_money']
-            
+                # Определяем, есть ли запись в биометрике за эту дату
+                found = False
+                btype = link['biometric_type']
+
+                if btype == 'activity':
+                    # Запрос для активности
+                    if link['biometric_id'] is not None:
+                        # Конкретная запись по ID
+                        rows = db.query(
+                            "SELECT id FROM biometric_physical_activity WHERE id = ? AND date = ?",
+                            (link['biometric_id'], date_str)
+                        )
+                        found = len(rows) > 0
+                    elif link['biometric_value'] is not None:
+                        # Конкретный тип активности (например, 'отжимания')
+                        rows = db.query(
+                            "SELECT id FROM biometric_physical_activity WHERE activity_type = ? AND date = ?",
+                            (link['biometric_value'], date_str)
+                        )
+                        found = len(rows) > 0
+                    else:
+                        # Любая активность
+                        rows = db.query(
+                            "SELECT id FROM biometric_physical_activity WHERE date = ?",
+                            (date_str,)
+                        )
+                        found = len(rows) > 0
+
+                elif btype == 'substance':
+                    # Вещества
+                    if link['biometric_id'] is not None:
+                        rows = db.query(
+                            "SELECT id FROM biometric_intake_log WHERE substance_id = ? AND date = ? AND taken = 1",
+                            (link['biometric_id'], date_str)
+                        )
+                        found = len(rows) > 0
+                    else:
+                        # любое принятое вещество
+                        rows = db.query(
+                            "SELECT id FROM biometric_intake_log WHERE date = ? AND taken = 1",
+                            (date_str,)
+                        )
+                        found = len(rows) > 0
+
+                elif btype == 'meal':
+                    # Приём пищи
+                    if link['biometric_id'] is not None:
+                        rows = db.query(
+                            "SELECT id FROM biometric_meals WHERE id = ? AND date = ?",
+                            (link['biometric_id'], date_str)
+                        )
+                        found = len(rows) > 0
+                    else:
+                        rows = db.query(
+                            "SELECT id FROM biometric_meals WHERE date = ?",
+                            (date_str,)
+                        )
+                        found = len(rows) > 0
+
+                elif btype == 'measurement':
+                    # Измерение
+                    if link['biometric_id'] is not None:
+                        rows = db.query(
+                            "SELECT id FROM biometric_measurements WHERE id = ? AND date = ?",
+                            (link['biometric_id'], date_str)
+                        )
+                        found = len(rows) > 0
+                    else:
+                        rows = db.query(
+                            "SELECT id FROM biometric_measurements WHERE date = ?",
+                            (date_str,)
+                        )
+                        found = len(rows) > 0
+
+                # Если запись найдена – добавляем бонусы
+                if found:
+                    bonuses['biometric']['i'] += link['bonus_i']
+                    bonuses['biometric']['s'] += link['bonus_s']
+                    bonuses['biometric']['w'] += link['bonus_w']
+                    bonuses['biometric']['e'] += link['bonus_e']
+                    bonuses['biometric']['c'] += link['bonus_c']
+                    bonuses['biometric']['h'] += link['bonus_h']
+                    bonuses['biometric']['st'] += link['bonus_st']
+                    bonuses['biometric']['money'] += link['bonus_money']
+
             # Получить связи привычка-финансы
             finance_links = db.query(
                 "SELECT * FROM habit_finance_links WHERE habit_id = ?",
@@ -211,7 +287,7 @@ def register_combinations_api(app, db: Database):
                 bonuses['finance']['h'] += link['bonus_h']
                 bonuses['finance']['st'] += link['bonus_st']
                 bonuses['finance']['money'] += link['bonus_money']
-            
+
             return jsonify(bonuses)
         except Exception as e:
             return jsonify({'error': str(e)}), 500

@@ -326,13 +326,37 @@
             </select>
           </div>
           
-      <div class="form-group">
-        <label>ID биометрики (опционально)</label>
-        <input type="number" id="hb-biometric-id" placeholder="для конкретного вещества/активности">
-        <select id="hb-biometric-select" style="margin-top: 8px;">
-          <option value="">Или выберите из списка</option>
-        </select>
-      </div>
+<div class="form-group">
+    <label>Привязка к:</label>
+    <label>
+        <input type="radio" name="bio_scope" value="any_type" checked> Любой активности (без привязки к типу)
+    </label>
+    <label>
+        <input type="radio" name="bio_scope" value="specific_type"> Конкретный тип активности
+    </label>
+    <label>
+        <input type="radio" name="bio_scope" value="specific_record"> Конкретная запись (по ID)
+    </label>
+</div>
+
+        <div id="typeActivityBlock" style="display: none;">
+            <div class="form-group">
+                <label>Тип активности</label>
+                <select id="hb-activity-type-select">
+                    <option value="">-- выберите тип --</option>
+                </select>
+            </div>
+        </div>
+
+        <div id="specificRecordBlock" style="display: none;">
+            <div class="form-group">
+                <label>Конкретная запись</label>
+                <select id="hb-biometric-select">
+                    <option value="">-- выберите запись --</option>
+                </select>
+                <input type="number" id="hb-biometric-id" placeholder="или ID вручную">
+            </div>
+        </div>
 
         <div class="bonuses-grid" id="hb-bonuses">
           <div class="bonus-input">

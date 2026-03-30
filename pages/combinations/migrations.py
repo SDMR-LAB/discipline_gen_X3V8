@@ -83,6 +83,13 @@ def migrate(db):
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
-    
+    # Добавить колонку biometric_value в habit_biometric_links, если её нет
+    try:
+        db.execute("ALTER TABLE habit_biometric_links ADD COLUMN biometric_value TEXT")
+        print("✓ Добавлена колонка biometric_value в habit_biometric_links")
+    except Exception as e:
+        # колонка уже существует
+        pass
+        
     db.commit()
     print("✓ Таблицы для связей между модулями созданы")
