@@ -244,9 +244,24 @@ function renderHabitBiometricList() {
       .map(key => `<span class="bonus-badge positive">${key.toUpperCase()}[${link[`bonus_${key}`].toFixed(2)}]</span>`);
 
     let biometricDescription = '';
-    if (link.biometric_id) {
+    let biometricHeader = link.biometric_type;
+
+    if (link.biometric_type === 'activity') {
+      if (link.biometric_id) {
+        const act = activities.find(a => a.id === link.biometric_id);
+        biometricHeader = act ? `${act.date} ${act.activity_type}` : `Активность #${link.biometric_id}`;
+        biometricDescription = `запись ID ${link.biometric_id}`;
+      } else if (link.biometric_value) {
+        biometricHeader = link.biometric_value;
+        biometricDescription = `тип "${link.biometric_value}" (все записи)`;
+      } else {
+        biometricHeader = 'все активности';
+        biometricDescription = 'любая активность';
+      }
+    } else if (link.biometric_id) {
       biometricDescription = `запись ID ${link.biometric_id}`;
     } else if (link.biometric_value) {
+      biometricHeader = link.biometric_value;
       biometricDescription = `тип "${link.biometric_value}" (все записи)`;
     } else {
       biometricDescription = `любая ${link.biometric_type}`;
@@ -255,7 +270,7 @@ function renderHabitBiometricList() {
     return `
       <div class="link-card">
         <div class="link-card-info">
-          <h4>${habit?.name || '?'} ↔ ${link.biometric_type}</h4>
+          <h4>${habit?.name || '?'} ↔ ${biometricHeader}</h4>
           <p>${biometricDescription}</p>
           <div class="bonus-badges">${bonuses.join('')}</div>
         </div>

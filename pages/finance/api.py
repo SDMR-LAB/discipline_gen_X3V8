@@ -10,15 +10,19 @@ def register_finance_api(app, db):
     @bp.route('/stats', methods=['GET'])
     def get_stats():
         """Возвращает статистику за период: доходы, расходы, активные/пассивные доходы."""
-        period = request.args.get('period', 'month')  # week, month, year
+        period = request.args.get('period', 'month')  # week, month, year, all
         date_str = request.args.get('date', datetime.today().date().isoformat())
         end_date = datetime.strptime(date_str, '%Y-%m-%d').date()
-        if period == 'week':
+        if period == 'all':
+            start_date = date(2000, 1, 1)
+        elif period == 'week':
             start_date = end_date - timedelta(days=7)
         elif period == 'month':
             start_date = end_date - timedelta(days=30)
-        else:  # year
+        elif period == 'year':
             start_date = end_date - timedelta(days=365)
+        else:
+            start_date = end_date - timedelta(days=30)
 
         conn = db.get_conn()
         conn.row_factory = sqlite3.Row

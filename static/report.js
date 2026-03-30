@@ -31,6 +31,43 @@ function formatStats(stats) {
   return `I[${ stats.I.toFixed(2)}] S[${ stats.S.toFixed(2)}] W[${ stats.W.toFixed(2)}] E[${ stats.E.toFixed(2)}] C[${ stats.C.toFixed(2)}] H[${ stats.H.toFixed(2)}] ST[${ Number(stats.ST).toFixed(2)}] $[${ stats.$}]`;
 }
 
+// Helper: проверка, попадает ли биометрическая запись в связь
+function biometricLinkMatches(link, biometricData) {
+    if (!link || !biometricData) return false;
+    const type = link.biometric_type;
+    const id = link.biometric_id;
+    const value = link.biometric_value;
+
+    switch (type) {
+        case 'substance': {
+            const list = biometricData.intakes || [];
+            if (id) return list.some(i => i.substance_id === id && i.taken);
+            if (value) return list.some(i => (i.substance_name === value || String(i.substance_id) === String(value)) && i.taken);
+            return list.some(i => i.taken);
+        }
+        case 'meal': {
+            const list = biometricData.meals || [];
+            if (id) return list.some(m => m.id === id);
+            if (value) return list.some(m => m.meal_type === value || m.description === value);
+            return list.length > 0;
+        }
+        case 'activity': {
+            const list = biometricData.activities || [];
+            if (id) return list.some(a => a.id === id);
+            if (value) return list.some(a => a.activity_type === value || String(a.id) === String(value));
+            return list.length > 0;
+        }
+        case 'measurement': {
+            const list = biometricData.measurements || [];
+            if (id) return list.some(m => m.id === id);
+            if (value) return list.some(m => String(m.id) === String(value));
+            return list.length > 0;
+        }
+        default:
+            return false;
+    }
+}
+
 // +++ NEW: Глобальные переменные для справочников биометрики и финансов
 let mealsCatalog = [];
 let activitiesCatalog = [];
@@ -87,21 +124,7 @@ function calculateTotalStatsWithLinks(parsed, friction, biometricData, financeDa
         const habitDone = habitIds[link.habit_id] || false;
         if (!habitDone) continue;
 
-        let found = false;
-        if (link.biometric_type === 'substance' && link.biometric_id) {
-            found = biometricData.intakes?.some(i => i.substance_id === link.biometric_id && i.taken);
-        } else if (link.biometric_type === 'meal' && link.biometric_id) {
-            found = biometricData.meals?.some(m => m.id === link.biometric_id);
-        } else if (link.biometric_type === 'activity' && link.biometric_id) {
-            found = biometricData.activities?.some(a => a.id === link.biometric_id);
-        } else if (link.biometric_type === 'measurement' && link.biometric_id) {
-            found = biometricData.measurements?.some(m => m.id === link.biometric_id);
-        } else if (!link.biometric_id) {
-            if (link.biometric_type === 'substance') found = biometricData.intakes?.some(i => i.taken);
-            else if (link.biometric_type === 'meal') found = biometricData.meals?.length > 0;
-            else if (link.biometric_type === 'activity') found = biometricData.activities?.length > 0;
-            else if (link.biometric_type === 'measurement') found = biometricData.measurements?.length > 0;
-        }
+        const found = biometricLinkMatches(link, biometricData);
 
         if (found) {
             totals.I += (link.bonus_i || 0) * mult;
@@ -332,6 +355,7 @@ let autoBiometricBonuses = []; // автобонусы от биометрики
 
 let currentFinanceData = [];
 let currentBiometricData = { intakes: [], meals: [], measurements: [], activities: [], mental: [] };
+let financePeriodStats = { week: null, month: null, all: null };
 let substancesCatalog = []; // для подстановки названий веществ
 
 let elements = {}; // Инициализируется в DOMContentLoaded
@@ -516,6 +540,17 @@ async function loadPeriodStats(period) {
   } catch (e) {
     console.error('loadPeriodStats', e);
   }
+}
+
+async function loadFinancePeriodStats(period) {
+    try {
+        const data = await fetchAPI(`/api/finance/stats?period=${period}`);
+        if (data.data) {
+            financePeriodStats[period] = data.data;
+        }
+    } catch (e) {
+        console.warn(`loadFinancePeriodStats(${period})`, e);
+    }
 }
 
 function displayPeriodStats(data, period) {
@@ -875,31 +910,11 @@ function renderMeta() {
 }
 
 
-// Функция для проверки, есть ли биометрическая запись определённого типа (и опционально ID)
-function hasBiometricEntry(type, id = null) {
+// Функция для проверки, есть ли биометрическая запись определённого типа (и опционально ID/тип)
+function hasBiometricEntry(type, id = null, value = null) {
     if (!currentBiometricData) return false;
-    let list = [];
-    switch (type) {
-        case 'substance': list = currentBiometricData.intakes; break;
-        case 'meal': list = currentBiometricData.meals; break;
-        case 'activity': list = currentBiometricData.activities; break;
-        case 'measurement': list = currentBiometricData.measurements; break;
-        case 'sleep': list = []; // сон пока не реализован
-        default: return false;
-    }
-    if (!list.length) return false;
-    if (id === null) return true; // любая запись
-    // ищем запись с указанным id (для intake это substance_id, для meal - id, и т.д.)
-    if (type === 'substance') {
-        return list.some(entry => entry.substance_id === id);
-    } else if (type === 'meal') {
-        return list.some(entry => entry.id === id);
-    } else if (type === 'activity') {
-        return list.some(entry => entry.id === id);
-    } else if (type === 'measurement') {
-        return list.some(entry => entry.id === id);
-    }
-    return false;
+    const dummyLink = { biometric_type: type, biometric_id: id, biometric_value: value };
+    return biometricLinkMatches(dummyLink, currentBiometricData);
 }
 
 // Функция для проверки финансовых транзакций
@@ -950,34 +965,7 @@ function isBiometricLinkActive(link) {
     if (!habitSuccess) return false;
 
     // Проверяем наличие биометрической записи
-    switch (link.biometric_type) {
-        case 'substance':
-            if (link.biometric_id) {
-                return currentBiometricData.intakes.some(i => i.substance_id === link.biometric_id && i.taken);
-            } else {
-                return currentBiometricData.intakes.some(i => i.taken);
-            }
-        case 'meal':
-            if (link.biometric_id) {
-                return currentBiometricData.meals.some(m => m.id === link.biometric_id);
-            } else {
-                return currentBiometricData.meals.length > 0;
-            }
-        case 'activity':
-            if (link.biometric_id) {
-                return currentBiometricData.activities.some(a => a.id === link.biometric_id);
-            } else {
-                return currentBiometricData.activities.length > 0;
-            }
-        case 'measurement':
-            if (link.biometric_id) {
-                return currentBiometricData.measurements.some(m => m.id === link.biometric_id);
-            } else {
-                return currentBiometricData.measurements.length > 0;
-            }
-        default:
-            return false;
-    }
+    return biometricLinkMatches(link, currentBiometricData);
 }
 
 // Проверка активности связи привычка ↔ финансы
@@ -1128,19 +1116,42 @@ async function updateReportOutput() {
           for (const link of activeBioLinks) {
               const habit = habitsCatalog.find(h => h.id === link.habit_id);
               let bioName = link.biometric_type;
-              if (link.biometric_type === 'substance' && link.biometric_id) {
-                  const sub = substancesCatalog.find(s => s.id === link.biometric_id);
-                  if (sub) bioName = sub.name;
-                  else bioName = `Вещество #${link.biometric_id}`;
-              } else if (link.biometric_type === 'meal' && link.biometric_id) {
-                  const meal = mealsCatalog.find(m => m.id === link.biometric_id);
-                  bioName = meal ? `${meal.date} ${meal.meal_type}` : `Приём #${link.biometric_id}`;
-              } else if (link.biometric_type === 'activity' && link.biometric_id) {
-                  const act = activitiesCatalog.find(a => a.id === link.biometric_id);
-                  bioName = act ? `${act.date} ${act.activity_type}` : `Активность #${link.biometric_id}`;
-              } else if (link.biometric_type === 'measurement' && link.biometric_id) {
-                  const meas = measurementsCatalog.find(m => m.id === link.biometric_id);
-                  bioName = meas ? meas.date : `Измерение #${link.biometric_id}`;
+              if (link.biometric_type === 'substance') {
+                  if (link.biometric_id) {
+                      const sub = substancesCatalog.find(s => s.id === link.biometric_id);
+                      bioName = sub ? sub.name : `Вещество #${link.biometric_id}`;
+                  } else if (link.biometric_value) {
+                      bioName = link.biometric_value;
+                  } else {
+                      bioName = 'все вещества';
+                  }
+              } else if (link.biometric_type === 'meal') {
+                  if (link.biometric_id) {
+                      const meal = mealsCatalog.find(m => m.id === link.biometric_id);
+                      bioName = meal ? `${meal.date} ${meal.meal_type}` : `Приём #${link.biometric_id}`;
+                  } else if (link.biometric_value) {
+                      bioName = link.biometric_value;
+                  } else {
+                      bioName = 'все приёмы пищи';
+                  }
+              } else if (link.biometric_type === 'activity') {
+                  if (link.biometric_id) {
+                      const act = activitiesCatalog.find(a => a.id === link.biometric_id);
+                      bioName = act ? `${act.date} ${act.activity_type}` : `Активность #${link.biometric_id}`;
+                  } else if (link.biometric_value) {
+                      bioName = link.biometric_value;
+                  } else {
+                      bioName = 'все активности';
+                  }
+              } else if (link.biometric_type === 'measurement') {
+                  if (link.biometric_id) {
+                      const meas = measurementsCatalog.find(m => m.id === link.biometric_id);
+                      bioName = meas ? meas.date : `Измерение #${link.biometric_id}`;
+                  } else if (link.biometric_value) {
+                      bioName = link.biometric_value;
+                  } else {
+                      bioName = 'все измерения';
+                  }
               }
               const bonusStr = [];
               ['i','s','w','e','c','h','st','money'].forEach(k => {
@@ -1169,34 +1180,39 @@ async function updateReportOutput() {
               ['i','s','w','e','c','h','st','money'].forEach(k => {
                   if (bonus[`bonus_${k}`] !== 0) bonusStr.push(`${k.toUpperCase()}[${bonus[`bonus_${k}`].toFixed(2)}]`);
               });
-              report += `  ${bonus.biometric_type}${bonus.biometric_id ? ` #${bonus.biometric_id}` : ''}: ${bonus.description || 'без описания'} → ${bonusStr.join(' ')}\n`;
+              let bonusName = bonus.biometric_type;
+              if (bonus.biometric_value) bonusName = bonus.biometric_value;
+              else if (bonus.biometric_id) bonusName = `${bonus.biometric_type} #${bonus.biometric_id}`;
+              report += `  ${bonusName}: ${bonus.description || 'без описания'} → ${bonusStr.join(' ')}\n`;
           }
       }
   }
 
   // === ФИНАНСЫ ===
   if (currentFinanceData && currentFinanceData.length > 0) {
-      report += `\n=== ФИНАНСЫ ===\n`;
-      // Получим категории для подстановки
-      let categories = [];
-      try {
-          const catData = await fetchAPI("/api/finance_categories/list");
-          categories = catData.data;
-      } catch(e) { /* ignore */ }
-      const catMap = {};
-      categories.forEach(c => { catMap[c.id] = c; });
+      report += `\n=== ФИНАНСЫ (сегодня) ===\n`;
 
-      let incomeSum = 0, expenseSum = 0;
+      let dayIncome = 0, dayExpense = 0;
       for (const tx of currentFinanceData) {
-          const cat = catMap[tx.category_id];
-          const catName = cat ? cat.name : '—';
-          const sign = cat && cat.type === 'income' ? '+' : '-';
-          report += `${sign} ${catName}: ${tx.amount.toFixed(2)}${tx.description ? ` (${tx.description})` : ''}\n`;
-          if (cat && cat.type === 'income') incomeSum += tx.amount;
-          else expenseSum += tx.amount;
+          const cat = categoriesMap[tx.category_id];
+          if (cat && cat.type === 'income') dayIncome += tx.amount;
+          else dayExpense += tx.amount;
       }
-      report += `Итого: доход ${incomeSum.toFixed(2)}, расход ${expenseSum.toFixed(2)}, чистая прибыль ${(incomeSum - expenseSum).toFixed(2)}\n`;
+
+      report += `Доход: ${dayIncome.toFixed(2)}, Расход: ${dayExpense.toFixed(2)}, Чистая прибыль: ${(dayIncome - dayExpense).toFixed(2)}\n`;
+  } else {
+      report += `\n=== ФИНАНСЫ (сегодня) ===\nНет транзакций на текущую дату.\n`;
   }
+
+  report += `\n=== ФИНАНСЫ (периоды) ===\n`;
+  ['week', 'month', 'all'].forEach(period => {
+      const fs = financePeriodStats[period];
+      if (fs) {
+          report += `За ${period === 'all' ? 'всё время' : period}: доход ${fs.income.toFixed(2)}, расход ${fs.expense.toFixed(2)}, чистая прибыль ${fs.net.toFixed(2)}\n`;
+      } else {
+          report += `За ${period === 'all' ? 'всё время' : period}: нет данных\n`;
+      }
+  });
 
   // === ПРИНЯТЫЕ ВЕЩЕСТВА ===
   if (currentBiometricData.intakes && currentBiometricData.intakes.length > 0) {
@@ -1771,6 +1787,9 @@ async function saveToDatabase() {
 
     console.log("🔵 Загрузка начальных данных...");
     await loadPeriodStats('all');
+    await loadFinancePeriodStats('week');
+    await loadFinancePeriodStats('month');
+    await loadFinancePeriodStats('all');
     await loadAllLinks();
     await loadBiometricCatalogs();      // +++ добавить
     await loadFinanceCategories();       // +++ добавить
