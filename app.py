@@ -17,6 +17,8 @@ from pages.finance.model import Category, Transaction
 from pages.finance.api import register_finance_api
 from pages.biometric.model import (Substance, IntakeLog, Meal, Measurement, PhysicalActivity, ActivityLog, MentalDaily, CognitiveTest)
 from pages.biometric.api import register_biometric_api
+from pages.goals.model import Goal
+from pages.goals.api import register_goals_api
 
 # === НОВОЕ: импорт планировщика ===
 from core.planner import register_planner
@@ -65,6 +67,7 @@ register_entity_blueprint(app, PhysicalActivity, db)
 register_entity_blueprint(app, ActivityLog, db)
 register_entity_blueprint(app, MentalDaily, db)
 register_entity_blueprint(app, CognitiveTest, db)
+register_entity_blueprint(app, Goal, db)
 
 # Register statistics API
 register_stats_api(app, db)
@@ -82,6 +85,9 @@ register_biometric_api(app, db)
 # === НОВОЕ: регистрация API для связей между модулями ===
 register_combinations_api(app, db)
 print("✓ Combinations API registered")
+
+register_goals_api(app, db)
+
 
 # Add routes for static pages
 @app.route('/finance')
@@ -108,6 +114,11 @@ def planner_page():
 @app.route('/ideas')
 def ideas_page():
     return send_file('static/ideas.html', mimetype='text/html')
+
+
+@app.route('/goals')
+def goals_page():
+    return send_file('static/goals.html', mimetype='text/html')    
 
 @app.route('/tasks')
 def tasks_page():

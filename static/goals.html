@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="ru">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Цели | Планировщик</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        .goal-card {
+            background: white;
+            border: 1px solid #e0e0e0;
+            border-radius: 10px;
+            padding: 16px;
+            margin-bottom: 16px;
+        }
+        .goal-progress {
+            margin: 12px 0;
+        }
+        .progress-bar {
+            background: #eee;
+            border-radius: 10px;
+            height: 20px;
+            overflow: hidden;
+        }
+        .progress-fill {
+            background: #4a90e2;
+            width: 0%;
+            height: 100%;
+            text-align: center;
+            color: white;
+            line-height: 20px;
+            font-size: 12px;
+        }
+        .goal-meta {
+            font-size: 13px;
+            color: #666;
+            margin-top: 8px;
+        }
+        .toolbar {
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div data-include="/static/includes/header.html"></div>
+    <div class="main-content">
+        <h1>Цели</h1>
+        <div class="toolbar">
+            <button id="newGoalBtn">➕ Новая цель</button>
+        </div>
+        <div id="goalsList"></div>
+    </div>
+
+    <!-- Модальное окно для цели -->
+    <div id="goalModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2 id="modalTitle">Добавить цель</h2>
+            <form id="goalForm">
+                <input type="hidden" id="goalId">
+                <div class="form-group">
+                    <label for="goalName">Название</label>
+                    <input type="text" id="goalName" required>
+                </div>
+                <div class="form-group">
+                    <label for="goalType">Тип цели</label>
+                    <select id="goalType" required>
+                        <option value="habit_count">Количество выполнений привычки</option>
+                        <option value="habit_streak">Максимальный стрик привычки</option>
+                        <option value="activity_count">Количество повторений упражнения</option>
+                        <option value="substance_count">Количество дней приёма добавки</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="targetKeyContainer">Ключ цели</label>
+                    <div id="targetKeyContainer"></div>
+                    <small class="small">Автоматически формируется из выбранного значения</small>
+                </div>v>
+                <div class="form-group">
+                    <label for="targetCount">Целевое количество</label>
+                    <input type="number" id="targetCount" required min="1">
+                </div>
+                <div class="form-group">
+                    <label for="startDate">Дата начала</label>
+                    <input type="date" id="startDate" required>
+                </div>
+                <div class="form-group">
+                    <label for="endDate">Дата окончания</label>
+                    <input type="date" id="endDate" required>
+                </div>
+                <div class="form-group">
+                    <label for="goalDesc">Описание</label>
+                    <textarea id="goalDesc" rows="2"></textarea>
+                </div>
+                <div class="form-actions">
+                    <button type="submit">Сохранить</button>
+                    <button type="button" id="cancelBtn">Отмена</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="/static/goals.js"></script>
+    <script src="/static/include-loader.js" data-scripts=""></script>
+    <div data-include="/static/includes/footer.html"></div>
+</body>
+</html>

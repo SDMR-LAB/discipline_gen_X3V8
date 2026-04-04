@@ -1270,6 +1270,22 @@ async function updateReportOutput() {
       }
   });
 
+  // ... внутри updateReportOutput() после финансов
+  // === ЦЕЛИ ===
+  try {
+      const goalsData = await fetchAPI('/api/goals/progress?date=' + (elements.reportDateEl.value || toISODate(new Date())));
+      if (goalsData.data && goalsData.data.length > 0) {
+          report += `\n=== ЦЕЛИ ===\n`;
+          for (const goal of goalsData.data) {
+              report += `🎯 ${goal.name}: ${goal.current}/${goal.target} (${goal.percent}%)\n`;
+              report += `   Период: ${goal.start_date} – ${goal.end_date}\n`;
+              if (goal.description) report += `   Описание: ${goal.description}\n`;
+          }
+      }
+  } catch(e) {
+      console.warn('Goals not loaded', e);
+  }
+
   // === ПРИНЯТЫЕ ВЕЩЕСТВА ===
   if (currentBiometricData.intakes && currentBiometricData.intakes.length > 0) {
       report += `\n=== ПРИНЯТЫЕ ВЕЩЕСТВА ===\n`;
