@@ -31,7 +31,7 @@ async function loadSubstances() {
     const data = await fetchJSON('/api/biometric_substances/list');
     substances = data.data;
     renderSubstancesTable();
-    await loadIntakeLog(); // ← вместо renderIntakeLog()
+    await loadIntakeLog();
 }
 
 function renderSubstancesTable() {
@@ -88,7 +88,6 @@ async function loadIntakeLog(date = getTodayISO()) {
 function renderIntakeLog(date) {
     const container = document.getElementById('intakeLog');
     container.innerHTML = '';
-    // Заголовок с выбором даты
     const datePicker = document.createElement('div');
     datePicker.className = 'intake-date-picker';
     datePicker.innerHTML = `
@@ -96,7 +95,6 @@ function renderIntakeLog(date) {
         <button id="refreshIntake">Обновить</button>
     `;
     container.appendChild(datePicker);
-    // Таблица веществ и чекбоксы
     const table = document.createElement('table');
     table.className = 'intake-table';
     table.innerHTML = `<thead><tr><th>Вещество</th><th>Принято</th></tr></thead><tbody></tbody>`;
@@ -114,7 +112,6 @@ function renderIntakeLog(date) {
         cell.appendChild(chk);
     });
     container.appendChild(table);
-
     document.getElementById('refreshIntake').onclick = () => {
         const newDate = document.getElementById('intakeDate').value;
         loadIntakeLog(newDate);
@@ -122,10 +119,8 @@ function renderIntakeLog(date) {
 }
 
 async function toggleIntake(substanceId, date, taken) {
-    // Проверяем, есть ли уже запись за эту дату
     const existing = intakeLog.find(l => l.substance_id === substanceId);
     if (existing) {
-        // Обновляем
         const updated = { ...existing, taken };
         await fetchJSON(`/api/biometric_intake_log/update/${existing.id}`, {
             method: 'PUT',
@@ -133,7 +128,6 @@ async function toggleIntake(substanceId, date, taken) {
             body: JSON.stringify(updated)
         });
     } else {
-        // Создаём
         const newEntry = { substance_id: substanceId, date, taken };
         await fetchJSON('/api/biometric_intake_log/create', {
             method: 'POST',
@@ -141,7 +135,6 @@ async function toggleIntake(substanceId, date, taken) {
             body: JSON.stringify(newEntry)
         });
     }
-    // Перезагружаем журнал (чтобы обновить список)
     await loadIntakeLog(date);
 }
 
@@ -162,9 +155,7 @@ async function loadActivityLog(date = getTodayISO()) {
 function renderActivityLog(date) {
     const container = document.getElementById('activityLogContainer');
     if (!container) return;
-
     container.innerHTML = '';
-    // Заголовок с выбором даты
     const datePicker = document.createElement('div');
     datePicker.className = 'activity-date-picker';
     datePicker.innerHTML = `
@@ -172,22 +163,16 @@ function renderActivityLog(date) {
         <button id="refreshActivityLog">Обновить</button>
     `;
     container.appendChild(datePicker);
-
-    // Таблица активностей с чекбоксами и полями количества
     const table = document.createElement('table');
     table.className = 'activity-log-table';
     table.innerHTML = `<thead><tr><th>Активность</th><th>Количество</th><th>Выполнено</th></tr></thead><tbody></tbody>`;
     const tbody = table.querySelector('tbody');
-
     activityTypes.forEach(activityType => {
         const entry = activityLog.find(l => l.activity_type === activityType);
         const quantity = entry ? entry.quantity : 1;
         const completed = entry ? entry.completed : false;
-
         const row = tbody.insertRow();
         row.insertCell().textContent = activityType;
-
-        // Поле количества
         const qtyCell = row.insertCell();
         const qtyInput = document.createElement('input');
         qtyInput.type = 'number';
@@ -196,8 +181,6 @@ function renderActivityLog(date) {
         qtyInput.style.width = '60px';
         qtyInput.onchange = () => updateActivityQuantity(activityType, date, parseInt(qtyInput.value));
         qtyCell.appendChild(qtyInput);
-
-        // Чекбокс выполнения
         const chkCell = row.insertCell();
         const chk = document.createElement('input');
         chk.type = 'checkbox';
@@ -205,9 +188,7 @@ function renderActivityLog(date) {
         chk.onchange = () => toggleActivity(activityType, date, chk.checked, parseInt(qtyInput.value));
         chkCell.appendChild(chk);
     });
-
     container.appendChild(table);
-
     document.getElementById('refreshActivityLog').onclick = () => {
         const newDate = document.getElementById('activityLogDate').value;
         loadActivityLog(newDate);
@@ -220,9 +201,8 @@ async function toggleActivity(activityType, date, completed, quantity) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ activity_type: activityType, date, quantity, completed })
     });
-
     await loadActivityLog(date);
-    await loadActivities(); // Обновляем таблицу физической активности
+    await loadActivities();
 }
 
 async function updateActivityQuantity(activityType, date, quantity) {
@@ -231,16 +211,13 @@ async function updateActivityQuantity(activityType, date, quantity) {
         return;
     }
     quantity = parseInt(quantity);
-
     const existing = activityLog.find(l => l.activity_type === activityType);
     const completed = existing ? existing.completed : false;
-
     await fetchJSON('/api/biometric/activity/log/toggle', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ activity_type: activityType, date, quantity, completed })
     });
-
     await loadActivityLog(date);
     await loadActivities();
 }
@@ -404,6 +381,7 @@ function renderActivitiesTable(activities) {
         row.insertCell().textContent = a.activity_type;
         row.insertCell().textContent = a.quantity;
         row.insertCell().textContent = a.intensity || '';
+        row.insertCell().textContent = a.calories_per_unit ? `${a.calories_per_unit} ккал/ед` : '';
         row.insertCell().textContent = a.notes || '';
         const actions = row.insertCell();
         const editBtn = document.createElement('button');
@@ -429,6 +407,7 @@ function editActivity(act) {
     document.getElementById('actType').value = act.activity_type;
     document.getElementById('actQuantity').value = act.quantity;
     document.getElementById('actIntensity').value = act.intensity || '';
+    document.getElementById('actCalPerUnit').value = act.calories_per_unit || 0;
     document.getElementById('actNotes').value = act.notes || '';
     showModal('activityModal');
 }
@@ -551,7 +530,6 @@ async function deleteCognitiveTest(id) {
 
 // ========== Инициализация ==========
 document.addEventListener('DOMContentLoaded', () => {
-    // Переключение вкладок
     document.querySelectorAll('.tab-btn').forEach(btn => {
         btn.addEventListener('click', () => {
             const tabId = btn.getAttribute('data-tab');
@@ -559,8 +537,6 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById(`${tabId}Tab`).classList.add('active');
             document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
-
-            // Загружаем данные для активной вкладки
             if (tabId === 'substances') {
                 loadSubstances();
                 loadIntakeLog();
@@ -578,7 +554,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    // Кнопки добавления
     document.getElementById('addSubstanceBtn').onclick = () => {
         document.getElementById('substanceId').value = '';
         document.getElementById('substanceName').value = '';
@@ -617,6 +592,7 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('actType').value = '';
         document.getElementById('actQuantity').value = '';
         document.getElementById('actIntensity').value = '';
+        document.getElementById('actCalPerUnit').value = '0';
         document.getElementById('actNotes').value = '';
         showModal('activityModal');
     };
@@ -641,7 +617,6 @@ document.addEventListener('DOMContentLoaded', () => {
         showModal('testModal');
     };
 
-    // Формы сохранения
     document.getElementById('substanceForm').addEventListener('submit', async (e) => {
         e.preventDefault();
         const substance = {
@@ -701,6 +676,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const val = parseInt(document.getElementById('actIntensity').value);
                 return Number.isNaN(val) ? null : val;
             })(),
+            calories_per_unit: parseFloat(document.getElementById('actCalPerUnit').value) || 0,
             notes: document.getElementById('actNotes').value
         };
         if (!activity.activity_type) {
@@ -738,7 +714,6 @@ document.addEventListener('DOMContentLoaded', () => {
         await saveCognitiveTest(test);
     });
 
-    // Закрытие модальных окон
     document.querySelectorAll('.close, .closeModalBtn').forEach(btn => {
         btn.addEventListener('click', (e) => {
             const modal = e.target.closest('.modal');
@@ -749,7 +724,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (e.target.classList.contains('modal')) e.target.style.display = 'none';
     };
 
-    // Загружаем начальную вкладку
     loadSubstances();
     loadIntakeLog();
     loadActivityLog();

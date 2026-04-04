@@ -1308,6 +1308,7 @@ async function updateReportOutput() {
       }
   }
 
+
   // === ФИЗИЧЕСКИЕ ИЗМЕРЕНИЯ ===
   if (currentBiometricData.measurements && currentBiometricData.measurements.length > 0) {
       report += `\n=== ИЗМЕРЕНИЯ ===\n`;
@@ -1331,6 +1332,29 @@ async function updateReportOutput() {
           if (a.notes) report += `  Примечание: ${a.notes}\n`;
       }
   }
+
+  // === КАЛОРИИ (баланс) ===
+  let totalCaloriesBurned = 0;
+  let totalCaloriesIntake = 0;
+
+  // Считаем потраченные калории
+  if (currentBiometricData.activities && currentBiometricData.activities.length > 0) {
+      for (const a of currentBiometricData.activities) {
+          const calPerUnit = a.calories_per_unit || 0;
+          totalCaloriesBurned += a.quantity * calPerUnit;
+      }
+  }
+  // Считаем полученные калории из приёмов пищи
+  if (currentBiometricData.meals && currentBiometricData.meals.length > 0) {
+      for (const m of currentBiometricData.meals) {
+          totalCaloriesIntake += m.calories || 0;
+      }
+  }
+  const balance = totalCaloriesIntake - totalCaloriesBurned;
+  report += `\n=== КАЛОРИИ ===\n`;
+  report += `🔥 Потрачено: ${totalCaloriesBurned.toFixed(0)} ккал\n`;
+  report += `🍽 Получено: ${totalCaloriesIntake.toFixed(0)} ккал\n`;
+  report += `⚖️ Баланс: ${balance >= 0 ? '+' : ''}${balance.toFixed(0)} ккал (${balance >= 0 ? 'профицит' : 'дефицит'})\n`;  
 
   // === МЕНТАЛЬНЫЕ ПОКАЗАТЕЛИ ===
   if (currentBiometricData.mental && currentBiometricData.mental.length > 0) {

@@ -71,6 +71,7 @@ class PhysicalActivity(Entity):
         Field('activity_type', FieldType.STRING, required=True, label='Вид активности'),
         Field('quantity', FieldType.INTEGER, required=True, label='Количество'),
         Field('intensity', FieldType.INTEGER, label='Интенсивность (1-10)'),
+        Field('calories_per_unit', FieldType.FLOAT, default=0.0, label='Ккал за единицу'),
         Field('notes', FieldType.TEXT, label='Примечания'),
     ]
 

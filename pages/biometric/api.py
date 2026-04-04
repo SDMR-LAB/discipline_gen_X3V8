@@ -9,11 +9,9 @@ def register_biometric_api(app, db):
 
     @bp.route('/mental/trend', methods=['GET'])
     def mental_trend():
-        """Возвращает данные для графиков ментальных показателей за последние N дней."""
         days = int(request.args.get('days', 30))
         end_date = datetime.today().date()
         start_date = end_date - timedelta(days=days)
-
         conn = db.get_conn()
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
@@ -25,7 +23,6 @@ def register_biometric_api(app, db):
         """, (start_date.isoformat(), end_date.isoformat()))
         rows = cursor.fetchall()
         conn.close()
-
         data = []
         for row in rows:
             data.append({
@@ -40,11 +37,9 @@ def register_biometric_api(app, db):
 
     @bp.route('/measurements/weight', methods=['GET'])
     def weight_trend():
-        """Возвращает данные веса за последние N дней."""
         days = int(request.args.get('days', 30))
         end_date = datetime.today().date()
         start_date = end_date - timedelta(days=days)
-
         conn = db.get_conn()
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
@@ -56,13 +51,11 @@ def register_biometric_api(app, db):
         """, (start_date.isoformat(), end_date.isoformat()))
         rows = cursor.fetchall()
         conn.close()
-
         data = [{'date': row['date'], 'weight': row['weight']} for row in rows]
         return jsonify({'status': 'success', 'data': data})
 
     @bp.route('/activity/summary', methods=['GET'])
     def activity_summary():
-        """Суммарная длительность активности по видам за период."""
         period = request.args.get('period', 'month')
         end_date = datetime.today().date()
         if period == 'week':
@@ -71,7 +64,6 @@ def register_biometric_api(app, db):
             start_date = end_date - timedelta(days=30)
         else:
             start_date = end_date - timedelta(days=365)
-
         conn = db.get_conn()
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
@@ -84,13 +76,11 @@ def register_biometric_api(app, db):
         """, (start_date.isoformat(), end_date.isoformat()))
         rows = cursor.fetchall()
         conn.close()
-
         data = [{'activity_type': row['activity_type'], 'total_quantity': row['total_quantity']} for row in rows]
         return jsonify({'status': 'success', 'data': data})
 
     @bp.route('/activity/save', methods=['POST'])
     def save_physical_activity():
-        """Сохраняет или обновляет физическую активность. Если активность с таким типом и датой уже существует, обновляет количество."""
         data = request.get_json()
         if not data:
             return jsonify({'status': 'error', 'message': 'No data provided'}), 400
@@ -109,8 +99,9 @@ def register_biometric_api(app, db):
                 intensity = int(data['intensity'])
                 if not (1 <= intensity <= 10):
                     raise ValueError('Intensity must be between 1 and 10')
+            calories_per_unit = float(data.get('calories_per_unit', 0.0))
         except (ValueError, TypeError) as e:
-            return jsonify({'status': 'error', 'message': f'Invalid quantity/intensity: {e}'}), 400
+            return jsonify({'status': 'error', 'message': f'Invalid quantity/intensity/calories: {e}'}), 400
 
         try:
             conn = db.get_conn()
@@ -120,28 +111,24 @@ def register_biometric_api(app, db):
             return jsonify({'status': 'error', 'message': str(e)}), 500
 
         try:
-            # Проверяем, существует ли уже активность с таким типом и датой
             cursor.execute("""
                 SELECT id, quantity FROM biometric_physical_activity
                 WHERE date = ? AND activity_type = ?
             """, (data['date'], data['activity_type']))
-
             existing = cursor.fetchone()
 
             if existing:
-                # Перезаписываем количество (последнее введенное)
                 cursor.execute("""
                     UPDATE biometric_physical_activity
-                    SET quantity = ?, intensity = ?, notes = ?
+                    SET quantity = ?, intensity = ?, notes = ?, calories_per_unit = ?
                     WHERE id = ?
-                """, (quantity, intensity, data.get('notes'), existing['id']))
+                """, (quantity, intensity, data.get('notes'), calories_per_unit, existing['id']))
                 activity_id = existing['id']
             else:
-                # Создаем новую запись
                 cursor.execute("""
-                    INSERT INTO biometric_physical_activity (date, activity_type, quantity, intensity, notes)
-                    VALUES (?, ?, ?, ?, ?)
-                """, (data['date'], data['activity_type'], quantity, intensity, data.get('notes')))
+                    INSERT INTO biometric_physical_activity (date, activity_type, quantity, intensity, notes, calories_per_unit)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                """, (data['date'], data['activity_type'], quantity, intensity, data.get('notes'), calories_per_unit))
                 activity_id = cursor.lastrowid
 
             conn.commit()
@@ -154,7 +141,6 @@ def register_biometric_api(app, db):
 
     @bp.route('/activity/log', methods=['GET'])
     def get_activity_log():
-        """Получить журнал активностей за дату."""
         date = request.args.get('date', datetime.today().date().isoformat())
         conn = db.get_conn()
         conn.row_factory = sqlite3.Row
@@ -171,7 +157,6 @@ def register_biometric_api(app, db):
 
     @bp.route('/activity/types', methods=['GET'])
     def get_activity_types():
-        """Получить список всех имеющихся типов активности."""
         conn = db.get_conn()
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
@@ -184,16 +169,12 @@ def register_biometric_api(app, db):
         rows = cursor.fetchall()
         conn.close()
         data = [row['activity_type'] for row in rows if row['activity_type']]
-
         if not data:
-            # Базовый набор активности, если база пуста
             data = ['Отжимания', 'Приседания', 'Скручивания']
-
         return jsonify({'status': 'success', 'data': data})
 
     @bp.route('/activity/log/toggle', methods=['POST'])
     def toggle_activity_completion():
-        """Переключить статус выполнения активности."""
         data = request.get_json()
         if not data or 'activity_type' not in data or 'date' not in data:
             return jsonify({'status': 'error', 'message': 'Missing required fields'}), 400
@@ -216,12 +197,10 @@ def register_biometric_api(app, db):
         cursor = conn.cursor()
 
         try:
-            # Проверяем, существует ли запись
             cursor.execute("""
                 SELECT id FROM biometric_activity_log
                 WHERE activity_type = ? AND date = ?
             """, (activity_type, date))
-
             existing = cursor.fetchone()
 
             if existing:
@@ -236,9 +215,9 @@ def register_biometric_api(app, db):
                     VALUES (?, ?, ?, ?)
                 """, (activity_type, date, quantity, int(bool(completed))))
 
-            # Синхронизируем активность в таблице физической активности один-в-один
+            # Синхронизация с biometric_physical_activity
             cursor.execute("""
-                SELECT id FROM biometric_physical_activity
+                SELECT id, calories_per_unit FROM biometric_physical_activity
                 WHERE date = ? AND activity_type = ?
             """, (date, activity_type))
             phys = cursor.fetchone()
@@ -252,9 +231,9 @@ def register_biometric_api(app, db):
                     """, (quantity, None, '', phys['id']))
                 else:
                     cursor.execute("""
-                        INSERT INTO biometric_physical_activity (date, activity_type, quantity, intensity, notes)
-                        VALUES (?, ?, ?, ?, ?)
-                    """, (date, activity_type, quantity, None, ''))
+                        INSERT INTO biometric_physical_activity (date, activity_type, quantity, intensity, notes, calories_per_unit)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                    """, (date, activity_type, quantity, None, '', 0.0))
             else:
                 if phys:
                     cursor.execute("""
@@ -272,7 +251,6 @@ def register_biometric_api(app, db):
 
     @bp.route('/activity/predict/<activity_type>', methods=['GET'])
     def predict_activity(activity_type):
-        """Прогнозирует прогресс для активности."""
         try:
             from core.ml import predict_activity_progress
             result = predict_activity_progress(db, activity_type)
