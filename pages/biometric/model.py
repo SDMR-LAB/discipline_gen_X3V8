@@ -118,3 +118,68 @@ class CognitiveTest(Entity):
         Field('score', FieldType.FLOAT, required=True, label='Результат'),
         Field('notes', FieldType.TEXT, label='Примечания'),
     ]
+
+def fill_missing_activity_data(db):
+    conn = db.get_conn()
+    cursor = conn.cursor()
+
+    # Получаем все записи, отсортированные от новых к старым
+    cursor.execute("""
+        SELECT id, activity_type, notes, calories_per_unit, date
+        FROM biometric_physical_activity
+        ORDER BY date DESC, id DESC
+    """)
+    rows = cursor.fetchall()
+
+    type_cal_source = {}   # activity_type -> calories_per_unit
+    type_notes_source = {} # activity_type -> notes
+
+    for row in rows:
+        act_type = row[1]
+        notes = row[2]
+        cal = row[3]
+
+        # Запоминаем первый попавшийся (самый свежий) ненулевой калораж
+        if act_type not in type_cal_source and cal is not None and cal > 0:
+            type_cal_source[act_type] = cal
+
+        # Запоминаем первый попавшийся непустой notes
+        if act_type not in type_notes_source and notes and notes.strip():
+            type_notes_source[act_type] = notes
+
+    updates = []
+    for row in rows:
+        act_type = row[1]
+        notes = row[2]
+        cal = row[3]
+        new_notes = notes
+        new_cal = cal
+        need_update = False
+
+        # Если notes пуст и есть источник
+        if (notes is None or notes.strip() == '') and act_type in type_notes_source:
+            new_notes = type_notes_source[act_type]
+            need_update = True
+
+        # Если калораж = 0 или NULL и есть источник
+        if (cal is None or cal == 0) and act_type in type_cal_source:
+            new_cal = type_cal_source[act_type]
+            need_update = True
+
+        if need_update:
+            updates.append((new_notes, new_cal, row[0]))
+
+    if updates:
+        cursor.executemany("""
+            UPDATE biometric_physical_activity
+            SET notes = ?, calories_per_unit = ?
+            WHERE id = ?
+        """, updates)
+        conn.commit()
+        print(f"[INFO] Обновлено {len(updates)} записей активности")
+    else:
+        print("[INFO] Нет записей, требующих обновления")
+
+    print("Источники калорий:", type_cal_source)
+    print("Источники заметок:", type_notes_source)
+    conn.close()

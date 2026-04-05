@@ -19,6 +19,7 @@ from pages.biometric.model import (Substance, IntakeLog, Meal, Measurement, Phys
 from pages.biometric.api import register_biometric_api
 from pages.goals.model import Goal
 from pages.goals.api import register_goals_api
+from pages.biometric.model import fill_missing_activity_data
 
 # === НОВОЕ: импорт планировщика ===
 from core.planner import register_planner
@@ -85,6 +86,7 @@ register_biometric_api(app, db)
 # === НОВОЕ: регистрация API для связей между модулями ===
 register_combinations_api(app, db)
 print("✓ Combinations API registered")
+fill_missing_activity_data(db)
 
 register_goals_api(app, db)
 
