@@ -1297,6 +1297,29 @@ async function updateReportOutput() {
       console.warn('Goals not loaded', e);
   }
 
+  // === НАВЫКИ И РАНГИ (НОВЫЙ БЛОК) ===
+  try {
+      const skillsData = await fetchAPI('/api/skills/with-levels');
+      const skills = skillsData.data;
+      if (skills && skills.length > 0) {
+          report += `\n=== НАВЫКИ И РАНГИ ===\n`;
+          for (const s of skills) {
+              const hours = (s.total_minutes / 60).toFixed(1);
+              const percent = (s.total_minutes / 600000 * 100).toFixed(1);
+              report += `🧠 ${s.name}: ${s.level_name} (ур.${s.level}/20) — ${hours} ч / 10000 ч (${percent}%)\n`;
+              if (s.next_level_minutes > 0) {
+                  const nextHours = (s.next_level_minutes / 60).toFixed(1);
+                  report += `   ➡️ До следующего уровня: ${nextHours} ч\n`;
+              }
+          }
+      } else {
+          report += `\n=== НАВЫКИ И РАНГИ ===\nНет навыков. Создайте их в разделе "Навыки".\n`;
+      }
+  } catch(e) {
+      console.warn('Skills not loaded', e);
+      report += `\n=== НАВЫКИ И РАНГИ ===\nОшибка загрузки навыков\n`;
+  }
+
   // === ПРИНЯТЫЕ ВЕЩЕСТВА ===
   if (currentBiometricData.intakes && currentBiometricData.intakes.length > 0) {
       report += `\n=== ПРИНЯТЫЕ ВЕЩЕСТВА ===\n`;
