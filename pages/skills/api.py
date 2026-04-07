@@ -7,7 +7,6 @@ def register_skills_api(app, db: Database):
     @bp.route('/recalc', methods=['POST'])
     def recalc_skills():
         try:
-            # Получить все навыки
             skills = db.query("SELECT id, habit_id, minutes_per_unit FROM skills")
             for skill in skills:
                 skill_id = skill['id']
@@ -15,7 +14,6 @@ def register_skills_api(app, db: Database):
                 minutes_per_unit = skill['minutes_per_unit']
                 if habit_id is None or minutes_per_unit == 0:
                     continue
-                # Собрать все completion_habits для этой привычки с success=1
                 rows = db.query("""
                     SELECT ch.quantity
                     FROM completion_habits ch
@@ -23,9 +21,8 @@ def register_skills_api(app, db: Database):
                 """, (habit_id,))
                 total_minutes = 0.0
                 for row in rows:
-                    qty = row['quantity'] if row['quantity'] is not None else 1.0
-                    total_minutes += qty * minutes_per_unit
-                # Обновить total_minutes
+                    # Каждая запись – одно выполнение, quantity не влияет
+                    total_minutes += minutes_per_unit
                 db.execute("UPDATE skills SET total_minutes = ? WHERE id = ?", (total_minutes, skill_id))
             db.commit()
             return jsonify({'status': 'success', 'message': 'Skills recalculated'})

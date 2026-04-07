@@ -1689,7 +1689,23 @@ async function saveToDatabase() {
 
     console.log("🔵 saveToDatabase: STEP 9 - saving", rawHabits.length, "habits");
     for (const h of rawHabits) {
-      const catalogHabit = habitsCatalog.find(c => c.name === h.name && c.category === h.category);
+      // Нормализуем строки: обрезаем пробелы, приводим к нижнему регистру
+      const normName = (h.name || "").trim().toLowerCase();
+      const normCategory = (h.category || "").trim().toLowerCase();
+
+      const catalogHabit = habitsCatalog.find(c => {
+          const cName = (c.name || "").trim().toLowerCase();
+          const cCategory = (c.category || "").trim().toLowerCase();
+          // Если в отчёте категория пустая, а у справочной привычки категория тоже пустая или "Без категории" – считаем совпадением
+          const categoryMatch = normCategory === cCategory || 
+                              (normCategory === "" && (cCategory === "" || cCategory === "без категории"));
+          return cName === normName && categoryMatch;
+      });
+
+      // Для отладки – выводим в консоль, если не нашлось
+      if (!catalogHabit) {
+          console.warn(`⚠️ Привычка не найдена в справочнике: name="${h.name}", category="${h.category}"`);
+      }
       const payload = {
         completion_id: completionId,
         habit_id: catalogHabit ? catalogHabit.id : null,
