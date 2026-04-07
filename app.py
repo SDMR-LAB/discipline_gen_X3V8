@@ -20,6 +20,8 @@ from pages.biometric.api import register_biometric_api
 from pages.goals.model import Goal
 from pages.goals.api import register_goals_api
 from pages.biometric.model import fill_missing_activity_data
+from pages.skills.model import Skill
+from pages.skills.api import register_skills_api
 
 # === НОВОЕ: импорт планировщика ===
 from core.planner import register_planner
@@ -69,6 +71,8 @@ register_entity_blueprint(app, ActivityLog, db)
 register_entity_blueprint(app, MentalDaily, db)
 register_entity_blueprint(app, CognitiveTest, db)
 register_entity_blueprint(app, Goal, db)
+register_entity_blueprint(app, Skill, db)
+register_skills_api(app, db)   # кастомные эндпоинты
 
 # Register statistics API
 register_stats_api(app, db)
@@ -117,6 +121,10 @@ def planner_page():
 def ideas_page():
     return send_file('static/ideas.html', mimetype='text/html')
 
+# ... маршрут для статической страницы
+@app.route('/skills')
+def skills_page():
+    return send_file('static/skills.html', mimetype='text/html')
 
 @app.route('/goals')
 def goals_page():
