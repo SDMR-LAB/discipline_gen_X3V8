@@ -212,6 +212,52 @@ function calculateTotalStatsWithLinks(parsed, friction, biometricData, financeDa
     return totals;
 }
 
+async function loadAndRenderSkills() {
+  try {
+    const response = await fetchAPI("/api/skills/with-levels");
+    const skills = response.data;
+    const container = document.getElementById("skillsReportContent");
+    if (!container) return;
+
+    if (!skills || skills.length === 0) {
+      container.innerHTML = "Нет данных о навыках. Добавьте навыки в справочник.";
+      return;
+    }
+
+    let html = `<div style="display: flex; flex-direction: column; gap: 12px;">`;
+    for (const skill of skills) {
+      html += `
+        <div style="border-left: 4px solid #4caf50; padding-left: 12px;">
+          <strong>${escapeHtml(skill.name)}</strong> 
+          <span style="color: #888;">(уровень ${skill.level} – ${skill.level_name})</span><br>
+          <span>⏱ Всего часов: ${skill.total_hours.toFixed(1)} ч</span><br>
+          <progress value="${skill.progress_percent}" max="100" style="width: 100%; height: 8px; border-radius: 4px;"></progress>
+          <span style="font-size: 12px;">${skill.progress_percent.toFixed(1)}% до следующего уровня</span>
+          ${skill.next_level_minutes ? `<br><span style="font-size: 11px;">Осталось минут: ${Math.ceil(skill.next_level_minutes)}</span>` : ''}
+          ${skill.description ? `<br><span style="font-size: 12px;">📝 ${escapeHtml(skill.description)}</span>` : ''}
+        </div>
+      `;
+    }
+    html += `</div>`;
+    container.innerHTML = html;
+  } catch (e) {
+    console.error("Failed to load skills", e);
+    const container = document.getElementById("skillsReportContent");
+    if (container) container.innerHTML = "❌ Ошибка загрузки навыков";
+  }
+}
+
+// вспомогательная функция для экранирования HTML
+function escapeHtml(str) {
+  if (!str) return '';
+  return str.replace(/[&<>]/g, function(m) {
+    if (m === '&') return '&amp;';
+    if (m === '<') return '&lt;';
+    if (m === '>') return '&gt;';
+    return m;
+  });
+}
+
 // Модифицируем calculateTotalStats
 function calculateTotalStats(parsed, friction = 1) {
     const totals = { I: 0, S: 0, W: 0, E: 0, C: 0, H: 0, ST: 0, $: 0 };
@@ -540,7 +586,6 @@ async function loadDatesFromDB() {
     }
 
     updateReportOutput();
-    loadSkillsReport();
     alert("✅ Дат загружено: " + sortedDates.length);
   } catch (e) { 
     console.error("🔴 loadDatesFromDB: ERROR:", e);
@@ -565,7 +610,6 @@ async function loadPeriodStats(period) {
         $: Number(data.stats.sum_money || 0)
       };
       updateReportOutput();
-      loadSkillsReport();
     }
   } catch (e) {
     console.error('loadPeriodStats', e);
@@ -668,7 +712,6 @@ async function loadDayFromDB() {
     parseTextInput();
     renderMeta();
     await updateReportOutput();
-    loadSkillsReport();
     console.log("✅ loadDayFromDB: day loaded successfully");
   } catch (e) { 
     console.error("🔴 loadDayFromDB:", e);
@@ -733,18 +776,11 @@ function parseTextToStructure(text) {
         // Парсим количество и единицу (например "30 мин", "2л", "4 часа")
         const quantMatch = habitText.match(/(.+?)\s*—\s*(\d+(?:\.\d+)?)\s*(.+?)$/);
         if (quantMatch) {
-            name = quantMatch[1];
-            let qty = parseFloat(quantMatch[2]);
-            let rawUnit = quantMatch[3].toLowerCase().trim();
-            // Нормализуем единицы: часы -> минуты
-            if (rawUnit === 'час' || rawUnit === 'часа' || rawUnit === 'часов' || rawUnit === 'ч' || rawUnit === 'hour' || rawUnit === 'hours') {
-                qty = qty * 60;
-                rawUnit = 'мин';
-            }
-            // Если минуты – оставляем как есть
-            // Если другие единицы (страницы, разы) – не трогаем, но для навыков они не подходят
-            quantity = qty;
-            unit = rawUnit;
+          name = quantMatch[1];
+          quantity = parseFloat(quantMatch[2]);
+          unit = quantMatch[3];
+        } else {
+          name = habitText;
         }
 
         const habitObj = {
@@ -880,7 +916,6 @@ function renderTasks() {
         btn.textContent = item.success ? "[+]" : "[-]";
         renderMeta();
         updateReportOutput();
-        loadSkillsReport();
         // Пересчитать характеристики
         const friction = parseInt(elements.frictionIndex.value) || 1;
         const totals = calculateTotalStatsWithLinks(parsed, friction, currentBiometricData, currentFinanceData);
@@ -900,7 +935,7 @@ function renderTasks() {
       removeBtn.textContent = "×";
       removeBtn.className = "small";
       removeBtn.title = "Удалить привычку";
-      removeBtn.onclick = () => { parsed.splice(idx, 1); renderTasks(); renderMeta(); updateReportOutput(); loadSkillsReport(); };
+      removeBtn.onclick = () => { parsed.splice(idx, 1); renderTasks(); renderMeta(); updateReportOutput(); };
       controls.appendChild(removeBtn);
 
       if (!catalogHabit) {
@@ -1297,29 +1332,6 @@ async function updateReportOutput() {
       console.warn('Goals not loaded', e);
   }
 
-  // === НАВЫКИ И РАНГИ (НОВЫЙ БЛОК) ===
-  try {
-      const skillsData = await fetchAPI('/api/skills/with-levels');
-      const skills = skillsData.data;
-      if (skills && skills.length > 0) {
-          report += `\n=== НАВЫКИ И РАНГИ ===\n`;
-          for (const s of skills) {
-              const hours = (s.total_minutes / 60).toFixed(1);
-              const percent = (s.total_minutes / 600000 * 100).toFixed(1);
-              report += `🧠 ${s.name}: ${s.level_name} (ур.${s.level}/20) — ${hours} ч / 10000 ч (${percent}%)\n`;
-              if (s.next_level_minutes > 0) {
-                  const nextHours = (s.next_level_minutes / 60).toFixed(1);
-                  report += `   ➡️ До следующего уровня: ${nextHours} ч\n`;
-              }
-          }
-      } else {
-          report += `\n=== НАВЫКИ И РАНГИ ===\nНет навыков. Создайте их в разделе "Навыки".\n`;
-      }
-  } catch(e) {
-      console.warn('Skills not loaded', e);
-      report += `\n=== НАВЫКИ И РАНГИ ===\nОшибка загрузки навыков\n`;
-  }
-
   // === ПРИНЯТЫЕ ВЕЩЕСТВА ===
   if (currentBiometricData.intakes && currentBiometricData.intakes.length > 0) {
       report += `\n=== ПРИНЯТЫЕ ВЕЩЕСТВА ===\n`;
@@ -1367,6 +1379,23 @@ async function updateReportOutput() {
       }
   }
 
+  // === НАВЫКИ ===
+  try {
+    const skillsResp = await fetchAPI("/api/skills/with-levels");
+    const skills = skillsResp.data;
+    if (skills && skills.length > 0) {
+      report += `\n=== НАВЫКИ И РАНГИ ===\n`;
+      for (const skill of skills) {
+        report += `📖 ${skill.name}: уровень ${skill.level} (${skill.level_name}), всего ${skill.total_hours.toFixed(1)} ч, прогресс ${skill.progress_percent.toFixed(1)}%\n`;
+        if (skill.description) report += `   Описание: ${skill.description}\n`;
+      }
+    } else {
+      report += `\n=== НАВЫКИ ===\nНет данных. Добавьте навыки в справочник.\n`;
+    }
+  } catch(e) {
+    report += `\n=== НАВЫКИ ===\nОшибка загрузки: ${e.message}\n`;
+  }
+
   // === КАЛОРИИ (баланс) ===
   let totalCaloriesBurned = 0;
   let totalCaloriesIntake = 0;
@@ -1410,48 +1439,6 @@ async function updateReportOutput() {
   elements.reportOutput.textContent = report;
 }
 
-async function loadSkillsReport() {
-    // Локальная функция escapeHtml на случай, если глобальная недоступна
-    function escapeHtml(str) {
-        if (!str) return '';
-        return str.replace(/[&<>]/g, function(m) {
-            if (m === '&') return '&amp;';
-            if (m === '<') return '&lt;';
-            if (m === '>') return '&gt;';
-            return m;
-        });
-    }
-    try {
-        const data = await fetchAPI('/api/skills/with-levels');
-        const skills = data.data;
-        const container = document.getElementById('skillsReportContent');
-        if (!container) return;
-        if (!skills.length) {
-            container.innerHTML = '<p>Нет навыков. Создайте их в разделе "Навыки".</p>';
-            return;
-        }
-        let html = '<div class="stats-grid">';
-        for (const s of skills) {
-            const hours = (s.total_minutes / 60).toFixed(1);
-            const percent = (s.total_minutes / 600000 * 100).toFixed(1);
-            html += `
-                <div class="stat-item" style="text-align:left;">
-                    <strong>${escapeHtml(s.name)}</strong><br>
-                    <span class="level-badge">${s.level_name} (ур.${s.level}/20)</span><br>
-                    🕒 ${hours} ч / 10000 ч (${percent}%)<br>
-                    <div class="progress-bar" style="margin-top:4px;"><div class="progress-fill" style="width:${percent}%;"></div></div>
-                </div>
-            `;
-        }
-        html += '</div>';
-        container.innerHTML = html;
-    } catch(e) {
-        console.error('loadSkillsReport', e);
-        const container = document.getElementById('skillsReportContent');
-        if (container) container.innerHTML = '<p>Ошибка загрузки навыков</p>';
-    }
-}
-
 function showModal(id) {
   const modal = document.getElementById(id);
   if (modal) modal.style.display = "flex";
@@ -1472,6 +1459,8 @@ function showEditHabitModal(idx, category) {
   document.getElementById("editSuccess").value = item.success ? "1" : "0";
   showModal("habitEditModal");
 }
+
+
 
 function addHabitToCatalog(habit, category) {
   const data = {
@@ -1712,23 +1701,7 @@ async function saveToDatabase() {
 
     console.log("🔵 saveToDatabase: STEP 9 - saving", rawHabits.length, "habits");
     for (const h of rawHabits) {
-      // Нормализуем строки: обрезаем пробелы, приводим к нижнему регистру
-      const normName = (h.name || "").trim().toLowerCase();
-      const normCategory = (h.category || "").trim().toLowerCase();
-
-      const catalogHabit = habitsCatalog.find(c => {
-          const cName = (c.name || "").trim().toLowerCase();
-          const cCategory = (c.category || "").trim().toLowerCase();
-          // Если в отчёте категория пустая, а у справочной привычки категория тоже пустая или "Без категории" – считаем совпадением
-          const categoryMatch = normCategory === cCategory || 
-                              (normCategory === "" && (cCategory === "" || cCategory === "без категории"));
-          return cName === normName && categoryMatch;
-      });
-
-      // Для отладки – выводим в консоль, если не нашлось
-      if (!catalogHabit) {
-          console.warn(`⚠️ Привычка не найдена в справочнике: name="${h.name}", category="${h.category}"`);
-      }
+      const catalogHabit = habitsCatalog.find(c => c.name === h.name && c.category === h.category);
       const payload = {
         completion_id: completionId,
         habit_id: catalogHabit ? catalogHabit.id : null,
@@ -1758,9 +1731,6 @@ async function saveToDatabase() {
     alert("✓ Сохранено в БД!\nДата: " + completionData.date + "\nПривычек: " + rawHabits.length);
     loadDatesFromDB();
     loadStreaks();
-    // после alert("✓ Сохранено в БД...");
-    await fetch('/api/skills/recalc', { method: 'POST' });
-    await loadSkillsReport();
   } catch (e) {
     console.error("🔴 saveToDatabase: ОШИБКА:", e);
     console.error("🔴 saveToDatabase: stack:", e.stack);
@@ -1784,8 +1754,7 @@ async function saveToDatabase() {
     await loadHabitsCatalog();
     await loadCombinations();
     await loadStreaks();
-    await loadDatesFromDB();
-    await loadSkillsReport();
+    await loadDatesFromDB()
 
     console.log("🔵 Регистрация обработчиков событий...");
     
@@ -1911,7 +1880,6 @@ async function saveToDatabase() {
     elements.makeReportBtn?.addEventListener("click", () => {
       try {
         updateReportOutput();
-        loadSkillsReport();
       } catch (e) {
         console.error("🔴 Error in makeReportBtn:", e);
       }
@@ -1994,9 +1962,11 @@ async function saveToDatabase() {
     await loadFinancePeriodStats('week');
     await loadFinancePeriodStats('month');
     await loadFinancePeriodStats('all');
+    await loadAndRenderSkills();
     await loadAllLinks();
     await loadBiometricCatalogs();      // +++ добавить
     await loadFinanceCategories();       // +++ добавить
+    
     
     const today = toISODate(new Date());
     if (!elements.reportDateEl.value) {
