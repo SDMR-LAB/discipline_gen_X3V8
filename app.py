@@ -22,6 +22,7 @@ from pages.goals.api import register_goals_api
 from pages.biometric.model import fill_missing_activity_data
 from pages.skills.model import Skill
 from pages.skills.api import register_skills_api
+from pages.export.api import register_export_api
 
 
 # === НОВОЕ: импорт планировщика ===
@@ -73,6 +74,8 @@ register_entity_blueprint(app, MentalDaily, db)
 register_entity_blueprint(app, CognitiveTest, db)
 register_entity_blueprint(app, Goal, db)
 #register_entity_blueprint(app, Skill, db)
+
+
 register_skills_api(app, db)   # кастомные эндпоинты
 
 # Register statistics API
@@ -87,6 +90,10 @@ register_ideas(app, db)
 # Register custom APIs
 register_finance_api(app, db)
 register_biometric_api(app, db)
+
+# И после регистрации остальных API добавьте:
+register_export_api(app, db)
+print("✓ Export API registered")
 
 # === НОВОЕ: регистрация API для связей между модулями ===
 register_combinations_api(app, db)
@@ -145,6 +152,13 @@ def combinations_page():
     """Combinations and links management page"""
     return send_file('static/combinations.html', mimetype='text/html')
 
+# Добавьте в app.py:
+
+@app.route('/export')
+def export_page():
+    """Экспорт статистики за период"""
+    return send_file('static/export.html', mimetype='text/html')
+
 # === DEBUG ENDPOINTS ===
 @app.route('/api/debug/test-completion', methods=['POST'])
 def test_completion():
@@ -166,6 +180,7 @@ def test_completion():
         import traceback
         print(traceback.format_exc())
         return {'status': 'error', 'message': str(e)}, 500
+
 
 @app.route('/api/debug/list-completions', methods=['GET'])
 def debug_list_completions():
